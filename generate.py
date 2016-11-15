@@ -31,29 +31,49 @@ from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
-def story(z, image_loc, k=100, bw=50, lyric=False):
+def story(z, image_locs, k=100, bw=50, lyric=False):
     """
     Generate a story for an image at location image_loc
     """
-    # Load the image
-    rawim, im = load_image(image_loc)
+    
+    if not isinstance(image_locs, list):
+		image_locs = [image_locs]
+		
+	len_image_locs = len(image_locs)
+	# Num sentences per image_loc
+	num_sentences = k/len_image_locs
+	
+	sentences = []
+	for image_loc in image_locs:
+		# Load single image
+		rawim, im = load_image(image_loc)
 
-    # Run image through convnet
-    feats = compute_features(z['net'], im).flatten()
-    feats /= norm(feats)
+		# Run image through convnet
+		feats = compute_features(z['net'], im).flatten()
+		feats /= norm(feats)
 
-    # Embed image into joint space
-    feats = embedding.encode_images(z['vse'], feats[None,:])
+		# Embed image into joint space
+		feats = embedding.encode_images(z['vse'], feats[None,:])
 
-    # Compute the nearest neighbours
-    scores = numpy.dot(feats, z['cvec'].T).flatten()
-    sorted_args = numpy.argsort(scores)[::-1]
-    sentences = [z['cap'][a] for a in sorted_args[:k]]
-
-    print 'NEAREST-CAPTIONS: '
-    for s in sentences[:5]:
-        print s
-    print ''
+		# Compute the nearest neighbours
+		scores = numpy.dot(feats, z['cvec'].T).flatten()
+		sorted_args = numpy.argsort(scores)[::-1]
+		sentences += [z['cap'][a] for a in sorted_args[:num_sentences]]
+	
+	'''
+	Example as to what the following line is doing:
+	a = 100
+	b = 5
+	c = [x for x in range(a)]
+	print [c[a/b*j+i] for i in range(a/b) for j in range(b)] # [0, 20, 40, 80, 1, 21, 41, 61, ...]
+	'''
+	# Rearrange sentences round robin for image_locs
+	sentences = [sentences[num_sentences*j+i] for i in range(num_sentences) for j in range(len_image_locs)]
+	
+	print 'NEAREST-CAPTIONS: '
+	for s in sentences[:5]:
+		print s
+	print ''
 
     # Compute skip-thought vectors for sentences
     svecs = skipthoughts.encode(z['stv'], sentences, verbose=False)
